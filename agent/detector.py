@@ -1,9 +1,9 @@
 """
-Jira On-Prem Detector — backend-agnostic agentic research loop.
+Company Research Agent — backend-agnostic agentic research loop.
 
-Ported from TRA monorepo infrastructure/agents/jira-onprem-detector/agent.py.
-The only structural change: takes a SearchBackend at init instead of importing
-Exa directly, making the agent fully backend-agnostic.
+A general-purpose research agent that uses Claude + a pluggable search backend
+to answer structured questions about companies and return a classified,
+scored output.
 """
 
 import os
@@ -82,16 +82,16 @@ def _check_subdomain(subdomain: str) -> dict:
         return {"exists": False}
 
 
-class JiraOnPremDetector:
+class CompanyResearchAgent:
     """
-    Agentic Jira on-prem detector that works with any SearchBackend.
+    Agentic company research agent that works with any SearchBackend.
 
     Usage:
         from backends import ExaBackend
-        from agent import JiraOnPremDetector
+        from agent import CompanyResearchAgent
 
-        detector = JiraOnPremDetector(search_backend=ExaBackend())
-        output, costs = detector.research("MongoDB", "mongodb.com")
+        agent = CompanyResearchAgent(search_backend=ExaBackend())
+        output, costs = agent.research("Cursor", "cursor.sh")
     """
 
     def __init__(self, search_backend: SearchBackend, model: str = MODEL):
@@ -152,8 +152,8 @@ class JiraOnPremDetector:
             {
                 "role": "user",
                 "content": (
-                    f"Research whether {company_name} ({domain}) uses Jira on-premises "
-                    f"or Jira Cloud. Follow all 6 research steps and return the output "
+                    f"Research how deeply {company_name} ({domain}) has integrated AI/LLM "
+                    f"into its products. Follow all 6 research steps and return the output "
                     f"in the exact structured format specified."
                 ),
             }

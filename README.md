@@ -2,18 +2,23 @@
 
 A benchmark that runs the same agentic research loop against two interchangeable search backends — [Exa](https://exa.ai) and [Linkup](https://www.linkup.so) — and compares result quality, cost, search efficiency, and latency side-by-side on the same set of companies.
 
-The research task: detect whether a company uses Jira on-premises (Data Center/Server) vs Jira Cloud. This is a non-trivial agentic task that requires 10–15 web searches, subdomain resolution, and multi-step reasoning — a real-world stress test for search APIs, not a keyword query benchmark.
+The research task: classify how deeply a company has integrated AI/LLM into its products. This requires synthesizing signals across product pages, GitHub repositories, job postings, engineering blogs, and tech stack databases — a non-trivial agentic task that cannot be answered by a single source lookup. That makes it a real-world stress test for search APIs, not a keyword query benchmark.
 
-## Background
+## Why This Task
 
-In April 2026, Atlassian ends support for all Data Center products. Thousands of companies still running self-hosted Jira face a decision: migrate to Jira Cloud, or switch tools entirely. Identifying which companies are on-prem — and how far along they are in the migration decision — is a high-value signal for tools like Linear that are actively displacing Jira.
+"Is this company AI-native, or just using the word AI?" is one of the most common and genuinely hard research questions in sales, investing, and competitive analysis right now. The answer is rarely on one page. The agent has to:
 
-This benchmark was built to evaluate whether Exa and Linkup are interchangeable search backends for agentic research loops of this kind. The output is a side-by-side comparison, not a winner declaration — quality is judged manually.
+- Find the company's GitHub org and check for AI/ML repos and dependencies
+- Distinguish named, shipped AI features from marketing language
+- Cross-reference job posts to assess how seriously they're investing in AI engineering
+- Synthesize conflicting signals (e.g. a company that says "AI-powered" everywhere but has no ML engineers)
+
+This is exactly the kind of task where search backend quality matters — and where Exa and Linkup will diverge.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-org/search-backend-benchmark
+git clone https://github.com/KarlRaf/search-backend-benchmark
 cd search-backend-benchmark
 
 pip install -r requirements.txt
@@ -22,7 +27,7 @@ cp .env.example .env
 # Add your keys to .env
 
 # Quick test — single company, Exa only
-python benchmark.py --company "MongoDB" --domain "mongodb.com" --backends exa
+python benchmark.py --company "Cursor" --domain "cursor.sh" --backends exa
 
 # Full benchmark — all backends, sample CSV
 python benchmark.py --input data/sample_companies.csv
@@ -39,11 +44,22 @@ Results are written to `results/YYYY-MM-DD-HHMMSS/`:
 
 ```csv
 company,domain,expected_classification
-MongoDB,mongodb.com,ON_PREM_STABLE
-Stripe,stripe.com,CLOUD
+Cursor,cursor.sh,AI_NATIVE
+Figma,figma.com,AI_AUGMENTED
 ```
 
 The `expected_classification` column is optional — it is not used by the benchmark but helps you track ground truth when reviewing results.
+
+## Classification Codes
+
+| Code | Meaning | Example |
+|------|---------|---------|
+| `AI_NATIVE` | AI is the core product. Remove it and there is no product. | Cursor, Perplexity |
+| `AI_INTEGRATED` | AI is a primary differentiator, deeply embedded in the core experience. | GitHub Copilot, Glean |
+| `AI_AUGMENTED` | Traditional product with substantial, named AI features shipped. | Figma, Notion |
+| `AI_ADJACENT` | AI mentioned but only in auxiliary or support capacity. No user-facing AI features. | Stripe |
+| `EXPLORING` | Job posts or roadmap signals suggest AI is coming. No shipped features confirmed. | — |
+| `NO_AI_SIGNALS` | No evidence of AI in product, strategy, or hiring. | Basecamp |
 
 ## Adding a New Backend
 
@@ -78,7 +94,7 @@ BACKEND_MAP = {"exa": ExaBackend, "linkup": LinkupBackend, "mybackend": MyBacken
 
 | Metric | Description |
 |--------|-------------|
-| Classification | ON_PREM_STABLE / ON_PREM_PLANNING / ON_PREM_MIGRATING / CLOUD / HYBRID / NO_JIRA / INCONCLUSIVE |
+| Classification | AI_NATIVE / AI_INTEGRATED / AI_AUGMENTED / AI_ADJACENT / EXPLORING / NO_AI_SIGNALS |
 | Confidence | 0–100 score computed by the agent from evidence strength |
 | Search calls | Number of web_search tool calls made |
 | Search cost | API cost charged by the search backend (USD) |
@@ -87,24 +103,23 @@ BACKEND_MAP = {"exa": ExaBackend, "linkup": LinkupBackend, "mybackend": MyBacken
 | Latency | Wall-clock time for the full agentic loop |
 | Primary evidence | One-line strongest signal found by the agent |
 
-## Classification Codes
+## Research Steps
 
-| Code | Meaning |
-|------|---------|
-| ON_PREM_STABLE | On-prem confirmed, no migration signals |
-| ON_PREM_PLANNING | On-prem + early signals (RFPs, DC EOL mentions, evaluations) |
-| ON_PREM_MIGRATING | On-prem + active migration in progress |
-| CLOUD | Atlassian.net only, no on-prem signals |
-| HYBRID | Both on-prem and cloud, no clear direction |
-| NO_JIRA | No Jira evidence found |
-| INCONCLUSIVE | Weak signals only, confidence below threshold |
+The agent follows a fixed 6-step methodology per company:
+
+1. **Product page** — check for a dedicated AI subdomain, search the company's own site for AI features
+2. **GitHub org** — look for AI/ML repos, check for AI model dependencies (`openai`, `anthropic`, `langchain`, `huggingface`)
+3. **Job posts** — distinguish AI product engineering roles from internal AI tooling roles
+4. **Engineering blog** — look for AI feature launch announcements and technical deep-dives
+5. **Tech stack** — check Stackshare, declared integrations, AI provider partnerships
+6. **Company context** — founding year, employee count, industry (incumbents vs AI-native startups)
 
 ## Known Limitations
 
 - **No ground truth validation.** Results are shown side-by-side and judged manually. The `expected_classification` column in the CSV is for your reference only.
 - **Anthropic rate limits.** Backends run sequentially per company to avoid conflicts. Large CSVs will take time. The agent retries automatically with exponential backoff.
 - **Linkup cost tracking.** The linkup-sdk does not expose per-request cost in the response object. Search cost for Linkup is recorded as $0.0000 in reports. See [Linkup pricing](https://www.linkup.so/pricing) for current rates.
-- **Search query semantics.** The agent uses `site:` operators and exact-match strings. Some search backends handle these differently, which affects recall. This is intentional — it is part of what the benchmark measures.
+- **Fast-moving signals.** AI adoption changes rapidly. Results reflect the state of the web at the time of the run.
 
 ## Requirements
 

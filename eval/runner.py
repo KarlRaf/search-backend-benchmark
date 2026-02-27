@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backends.base import SearchBackend
-from agent.detector import JiraOnPremDetector
+from agent.detector import CompanyResearchAgent
 from agent.costs import RunCosts
 
 
@@ -88,8 +88,8 @@ def _run_single(
 
     t0 = time.monotonic()
     try:
-        detector = JiraOnPremDetector(search_backend=backend, model=model)
-        raw_output, costs = detector.research(company, domain)
+        agent = CompanyResearchAgent(search_backend=backend, model=model)
+        raw_output, costs = agent.research(company, domain)
 
         result.latency_seconds = time.monotonic() - t0
         result.raw_output = raw_output

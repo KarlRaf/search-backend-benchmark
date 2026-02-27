@@ -1,7 +1,7 @@
 company,domain,expected_classification
-MongoDB,mongodb.com,ON_PREM_STABLE
-Stripe,stripe.com,CLOUD
-Siemens,siemens.com,ON_PREM_STABLE
-Notion,notion.so,NO_JIRA
-Atlassian,atlassian.com,CLOUD
-Airbus,airbus.com,ON_PREM_STABLE
+Cursor,cursor.sh,AI_NATIVE
+Glean,glean.com,AI_NATIVE
+Figma,figma.com,AI_AUGMENTED
+Stripe,stripe.com,AI_ADJACENT
+ServiceNow,servicenow.com,AI_INTEGRATED
+Basecamp,basecamp.com,NO_AI_SIGNALS

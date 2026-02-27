@@ -1,4 +1,4 @@
-from .detector import JiraOnPremDetector
+from .detector import CompanyResearchAgent
 from .costs import RunCosts
 
-__all__ = ["JiraOnPremDetector", "RunCosts"]
+__all__ = ["CompanyResearchAgent", "RunCosts"]
