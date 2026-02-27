@@ -1,0 +1,7 @@
+company,domain,expected_classification
+MongoDB,mongodb.com,ON_PREM_STABLE
+Stripe,stripe.com,CLOUD
+Siemens,siemens.com,ON_PREM_STABLE
+Notion,notion.so,NO_JIRA
+Atlassian,atlassian.com,CLOUD
+Airbus,airbus.com,ON_PREM_STABLE
