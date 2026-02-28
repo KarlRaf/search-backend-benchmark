@@ -30,7 +30,7 @@ class ExaBackend(SearchBackend):
         response = self._client.search(
             query,
             num_results=num_results,
-            contents={"text": {"max_characters": 500}},
+            contents={"text": {"max_characters": 300}},
         )
         results = []
         for r in response.results:

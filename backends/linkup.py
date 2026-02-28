@@ -1,4 +1,4 @@
-"""Linkup search backend (linkup-sdk>=0.12.0)."""
+"""Linkup search backend (linkup-sdk>=0.11.0)."""
 
 import os
 from linkup import LinkupClient
@@ -14,7 +14,7 @@ class LinkupBackend(SearchBackend):
 
     Cost tracking: Linkup's SDK does not currently expose per-request cost in
     the response object. Cost is recorded as 0.0 and noted in the report.
-    See https://docs.linkup.so for pricing details.
+    See https://www.linkup.so/pricing for current rates.
     """
 
     name = "linkup"
@@ -32,19 +32,22 @@ class LinkupBackend(SearchBackend):
         Returns (results, 0.0) — cost is not tracked per-request by the SDK.
         """
         response = self._client.search(
-            q=query,
+            query=query,
             depth="standard",
             output_type="searchResults",
+            max_results=num_results,
         )
 
         results = []
         raw = getattr(response, "results", None) or []
-        for r in raw[:num_results]:
+        for r in raw:
+            # Skip image results — only text results have content
+            if getattr(r, "type", None) == "image":
+                continue
             results.append({
                 "url": getattr(r, "url", "") or "",
                 "title": getattr(r, "name", "") or "",
-                "snippet": (getattr(r, "content", "") or "").strip()[:500],
+                "snippet": (getattr(r, "content", "") or "").strip()[:300],
             })
 
-        # Cost not exposed by SDK — return 0.0 with a note logged at report time
         return results, 0.0

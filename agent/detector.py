@@ -17,7 +17,7 @@ from .prompts import SYSTEM_PROMPT
 from backends.base import SearchBackend
 
 MODEL = "claude-sonnet-4-6"
-MAX_TOOL_CALLS = 15
+MAX_TOOL_CALLS = 10
 
 TOOL_DEFINITIONS = [
     {
@@ -36,8 +36,8 @@ TOOL_DEFINITIONS = [
                 },
                 "num_results": {
                     "type": "integer",
-                    "description": "Number of results to return (default 5, max 10).",
-                    "default": 5,
+                    "description": "Number of results to return (default 3, max 5).",
+                    "default": 3,
                 },
             },
             "required": ["query"],
@@ -118,19 +118,25 @@ class CompanyResearchAgent:
             return {"error": f"Unknown tool: {tool_name}"}
 
     def _create_with_retry(
-        self, messages: list, max_retries: int = 5
+        self, messages: list, max_retries: int = 5, tools: bool = True
     ) -> anthropic.types.Message:
-        """Call the API with exponential backoff on rate limit errors."""
+        """Call the API with exponential backoff on rate limit errors.
+
+        Pass tools=False to make a text-only call (used for forced output and
+        nudges — prevents Claude from calling more tools when we need final output).
+        """
         delay = 60
+        kwargs = dict(
+            model=self.model,
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+        )
+        if tools:
+            kwargs["tools"] = TOOL_DEFINITIONS
         for attempt in range(max_retries):
             try:
-                return self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=SYSTEM_PROMPT,
-                    tools=TOOL_DEFINITIONS,
-                    messages=messages,
-                )
+                return self.client.messages.create(**kwargs)
             except anthropic.RateLimitError:
                 if attempt == max_retries - 1:
                     raise
@@ -174,7 +180,13 @@ class CompanyResearchAgent:
 
             if response.stop_reason == "end_turn":
                 output = text_blocks[-1].text.strip() if text_blocks else ""
-                if "classification:" not in output:
+                # Nudge up to 2 times if structured output is missing.
+                # Each iteration appends the previous response then a nudge user message.
+                # If Claude responds with tool_use instead of text, stop nudging —
+                # we cannot append tool_use without tool_results.
+                for _ in range(2):
+                    if "classification:" in output:
+                        break
                     messages.append({"role": "assistant", "content": response.content})
                     messages.append({
                         "role": "user",
@@ -183,18 +195,44 @@ class CompanyResearchAgent:
                             "starting with 'classification:'. No other text."
                         ),
                     })
-                    nudge_response = self._create_with_retry(messages)
+                    response = self._create_with_retry(messages, tools=False)
                     costs.api_calls += 1
-                    costs.input_tokens += nudge_response.usage.input_tokens
-                    costs.output_tokens += nudge_response.usage.output_tokens
-                    nudge_text = [b for b in nudge_response.content if b.type == "text"]
+                    costs.input_tokens += response.usage.input_tokens
+                    costs.output_tokens += response.usage.output_tokens
+                    nudge_text = [b for b in response.content if b.type == "text"]
                     output = nudge_text[-1].text.strip() if nudge_text else "(no output)"
                 return output, costs
 
             if response.stop_reason == "tool_use":
                 if tool_call_count >= MAX_TOOL_CALLS:
-                    output = text_blocks[-1].text.strip() if text_blocks else "(max tool calls reached)"
-                    return output, costs
+                    # Execute the pending tool calls to maintain valid message history,
+                    # then include a nudge instruction alongside the tool results so
+                    # Claude knows to produce structured output on the next turn.
+                    messages.append({"role": "assistant", "content": response.content})
+                    tool_results = []
+                    for block in tool_blocks:
+                        result = self._dispatch_tool(block.name, block.input, costs)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        })
+                    # A user turn can mix tool_result and text blocks.
+                    tool_results.append({
+                        "type": "text",
+                        "text": (
+                            "That is the last research step allowed. Produce the final "
+                            "structured output now based on everything you have found — "
+                            "starting with 'classification:'. No other text."
+                        ),
+                    })
+                    messages.append({"role": "user", "content": tool_results})
+                    forced = self._create_with_retry(messages, tools=False)
+                    costs.api_calls += 1
+                    costs.input_tokens += forced.usage.input_tokens
+                    costs.output_tokens += forced.usage.output_tokens
+                    forced_text = [b for b in forced.content if b.type == "text"]
+                    return forced_text[-1].text.strip() if forced_text else "(max tool calls reached)", costs
 
                 messages.append({"role": "assistant", "content": response.content})
 

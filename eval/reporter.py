@@ -45,7 +45,7 @@ def _generate_markdown(
     lines = []
 
     # Header
-    lines.append("# Search Backend Benchmark — Jira On-Prem Detection")
+    lines.append("# Search Backend Benchmark — AI Adoption Detection")
     lines.append("")
     lines.append(
         f"Run: {run_ts} | "
