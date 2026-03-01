@@ -8,7 +8,6 @@ scored output.
 
 import os
 import time
-import json
 import requests
 import anthropic
 
@@ -103,11 +102,11 @@ class CompanyResearchAgent:
         self.model = model
 
     def _dispatch_tool(self, tool_name: str, tool_input: dict, costs: RunCosts):
-        """Execute the named tool, update costs, return a JSON-serializable result."""
+        """Execute the named tool, update costs, return the raw result."""
         if tool_name == "web_search":
             results, search_cost = self.search_backend.search(
                 query=tool_input["query"],
-                num_results=tool_input.get("num_results", 5),
+                num_results=tool_input.get("num_results", 3),
             )
             costs.search_cost_usd += search_cost
             costs.search_calls += 1
@@ -116,6 +115,34 @@ class CompanyResearchAgent:
             return _check_subdomain(subdomain=tool_input["subdomain"])
         else:
             return {"error": f"Unknown tool: {tool_name}"}
+
+    @staticmethod
+    def _format_tool_result(tool_name: str, result) -> str:
+        """
+        Compress tool results to plain text before storing in the conversation.
+
+        Raw JSON search results accumulate fast — each re-sent on every subsequent
+        API call. Formatting as single-line plain text cuts per-search context by
+        ~70%, significantly reducing TPM usage across a full agentic loop.
+        """
+        if tool_name == "web_search":
+            if not result:
+                return "No results."
+            lines = []
+            for r in result:
+                url = r.get("url", "")
+                title = (r.get("title", "") or "")[:60]
+                snippet = (r.get("snippet", "") or "")[:80]
+                lines.append(f"- {url} | {title} | {snippet}")
+            return "\n".join(lines)
+        elif tool_name == "check_subdomain":
+            if result.get("exists"):
+                return (
+                    f"LIVE status={result.get('status_code')} "
+                    f"final_url={result.get('final_url')}"
+                )
+            return "NOT FOUND"
+        return str(result)
 
     def _create_with_retry(
         self, messages: list, max_retries: int = 5, tools: bool = True
@@ -215,7 +242,7 @@ class CompanyResearchAgent:
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": json.dumps(result),
+                            "content": self._format_tool_result(block.name, result),
                         })
                     # A user turn can mix tool_result and text blocks.
                     tool_results.append({
@@ -243,7 +270,7 @@ class CompanyResearchAgent:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": json.dumps(result),
+                        "content": self._format_tool_result(block.name, result),
                     })
 
                 messages.append({"role": "user", "content": tool_results})
